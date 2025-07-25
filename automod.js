@@ -22,7 +22,7 @@ nightNum=()=>nights.length;
 /**Get automod-supported roles*/
 getAutoRoles=()=>{
     let t=new XMLHttpRequest();
-    t.open('GET',`https://raw.githubusercontent.com/mafiaclub/mafiaclub.github.io/master/tiers/auto.json`);
+    t.open('GET',`auto.json`);
     t.onloadend=()=>autoRoles=JSON.parse(t.responseText);
     t.send();
     let r=new XMLHttpRequest();
@@ -461,6 +461,7 @@ giveRoles=(rolesOverride)=>{
     window.autoRoles||getAutoRoles();
     nights=[];
     let names=Id('names').value.split('\n').map(n=>n.trim());
+    if (names.length<2) {return alert('At least 2 players needed')}
     for (let i=0;i<names.length;i++) {
         for (let j=0;j<i;j++) {
             if (names[i]==names[j]) {return alert('No duplicate names')}
@@ -489,6 +490,7 @@ giveRoles=(rolesOverride)=>{
             for (let i=0;i<roles.length;i++) {
                 let n=roles[i].name;
                 (n=="Backstabber"||nonWakingMafia.includes(n))&&(roles[i]=new Role(tierCopy['mafia'].getRandom(1)));
+                lawfulEvil.includes(n)&&(roles[i]=new Role(tierCopy['third'].getRandom(1)));
             }
         }
         roles.forEach((r,i)=>players[i].role=r);
@@ -514,26 +516,6 @@ showHelp=()=>{
     }
 }
 init=()=>{
-    // setTimeout(()=>{
-    //     nights.push(new Night())
-    //     p1=new Player("P1");
-    //     p2=new Player("P2");
-    //     p1.role=new Role("1-Shot Bulletproof Mafia");
-    //     p1.num=-1;
-    //     p2.role=new Role("Bootlegger");
-    //     p2.num=-2;
-    //     currentPlayer=p2;
-    // },500);
-    Id('names').value=`Q
-W
-E
-R
-     \t This name has spaces at the ends \t
-Y
-U
-I
-O
-P`;
     Id('tier').value='all';
     getAutoRoles();
 }
