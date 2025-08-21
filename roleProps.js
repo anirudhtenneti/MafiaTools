@@ -5,18 +5,20 @@ appearingInnocent=["Godfather","Frontman","Backstabber"];
 //Roles that appear guilty initially
 appearingGuilty=["Miller","Tree-Hat"];
 //What Bard prevents and Sage cannot reflect
-killingVisits=["kill","burn","agora","dig","snipe"];
+killingVisits=["kill","burn","agora","dig","snipe","poison"];
 //3rd parties winning together
-allied3rd=[["Serial Killer","Admirer"],["Arsonist","Douser"]];
+allied3rd=[["Serial Killer","Admirer"],["Arsonist","Douser","Herbalist"],["Agoraphobe","Waterboarder"],["Zombie"]];
 //Roles that take over for others.
 sidekicks=[["Serial Killer","Admirer"],["Sheriff","Deputy"],["Arsonist","Douser"]];
 //Roles that cannot burn.
 fireproof=["Fireproof Townie","Fireproof Mafia","Backstabber"];
 savingVisits=['save','jail'];
 blockingVisits=['roleblock','jail','waterboard'];
-delayedKills=['snipe']
 //Evils who don't block the town/mafia win condition
-lawfulEvil=["Traitor",/*"Lawyer",*/"Jester"/*,"Monk"*/,"Backstabber"]
+lawfulEvil=["Traitor","Jester","Backstabber","Amnesiac"];
+boring=["Townie","1-Shot Bulletproof Townie","Fireproof Townie","Sleepwalker","Miller","Sage","Shopkeeper"];
+/*Roles working with the block*/
+blockRoles=["Seer","Framer","Accuser","Hangman"];
 //Abilities other than mafia kill
 getSkill=(role)=>{
     switch (role.name) {
@@ -38,7 +40,7 @@ getSkill=(role)=>{
             return ()=>visit1Player("Who gets milk?",0,"milk");
         case "Deputy":
             let s=getPlayerByRole('Sheriff');
-            if (s&&s.alive) return null/*()=>tellPlayer("The Sheriff is alive. Your work has not begun.")*/;
+            if (s&&tonight().alive.includes(s)) return null;
         case "Sheriff":
             return ()=>visit1Player("Investigate whom?",0,"info");
         case "Bootlegger":
@@ -80,7 +82,7 @@ getSkill=(role)=>{
         case "Jailor":
             return ()=>visit1Player("Jail whom?",0,"jail",null,null,1);
         case "Arsonist":
-            return ()=>visit1Player('Pick someone to douse or check Do Nothing to ignite all doused people.'+(nightNum()==1?`<br>There is ${getPlayerByRole('Douser')?'a':'no'} Douser.`:''),1,"douse",null,()=>Id('action2skip').checked&&tonight().visits.push(new Visit(currentPlayer,null,'burn')));
+            return ()=>visit1Player('Pick someone to douse or check Do Nothing to ignite all doused people.'+(nightNum()==1?`<br>There is ${getPlayerByRole('Douser')?'a':'no'} Douser.`:''),1,"douse",null,()=>Id('action2skip').checked&&tonight().visits.push(new Visit(currentPlayer,samplePlayer,'burn')));
         case "Virgin":
             return role.uses?()=>action("Prevent all kills tonight?",0,["No","Yes"],null,()=>Id('action2choices').value=="No"||(push1Visit('save'),role.uses--)):null;
         case "Priest":
@@ -89,7 +91,7 @@ getSkill=(role)=>{
             return ()=>action("Save whom?",0,liveNames().filter(n=>n!=role.prevSave),null,()=>{push1Visit('save');role.prevSave=Id('action2choices').value;});
         case "Douser":
             let f=getPlayerByRole('Arsonist');
-            return ()=>visit1Player(f&&f.alive?((nightNum()==1?f.name+' is the Arsonist.<br>':'')+'Douse whom?'):'Pick someone to douse or check Do Nothing to ignite all doused people. You can only ignite ONCE.',!(f&&f.alive)&&role.uses,"douse",null,()=>Id('action2skip').checked&&(role.uses--,tonight().visits.push(new Visit(currentPlayer,null,'burn'))));
+            return ()=>visit1Player(f&&f.alive?((nightNum()==1?f.name+' is the Arsonist.<br>':'')+'Douse whom?'):'Pick someone to douse or check Do Nothing to ignite all doused people. You can only ignite ONCE.',!(f&&f.alive)&&role.uses,"douse",null,()=>Id('action2skip').checked&&(role.uses--,tonight().visits.push(new Visit(currentPlayer,samplePlayer,'burn'))));
         case "Veteran":
             return role.uses?()=>action("Keep watch tonight?",0,["No","Yes"],null,()=>Id('action2choices').value=="No"||(push1Visit('kill'),role.uses--)):null;
         case "Illusionist":
@@ -103,13 +105,21 @@ getSkill=(role)=>{
         case "Escape Artist":
             return role.wasVoted&&nightNum()>2?()=>visit1Player("Roleblock whom?",role.wasVoted=0,"roleblock"):null;
         case "King":
-            return role.uses?()=>action("Silence everyone today?",0,["No","Yes"],null,()=>Id('action2choices').value=="No"||(tonight().visits.push(new Visit(currentPlayer,null,'silence')),role.uses--)):null;
+            return role.uses?()=>action("Silence everyone today?",0,["No","Yes"],null,()=>Id('action2choices').value=="No"||(tonight().visits.push(new Visit(currentPlayer,samplePlayer,'silence')),role.uses--)):null;
         case "Tactician":
             return ()=>visit1Player("Pick a backup Mafia target. If the original target is visited by another killing role, the Mafia will kill this person instead.",0,"tactic");
         case "Tinker":
-            return ()=>visit1Player("Will you replenish someone's ability uses and bulletproof?",1,"tinker",null,null,role.tinkered);
+            return role.uses?()=>visit1Player("Will you replenish someone's ability uses and bulletproof?",1,"tinker",null,()=>Id('action2skip').checked||(role.uses--),role.tinkered):null;
         case "Shrink":
             return ()=>visit1Player("Convert whom to Townie if they are 3rd party?",0,"shrink");
+        case "Zombie":
+            return role.zombifiedBy?null:()=>visit1Player("Zombify whom? The target's role becomes Zombie at the start of next night.",0,"zombify",null,null,2);
+        case "Framer":
+            return ()=>visit1Player("Frame whom?",0,"frame");
+        case "Accuser":
+            return ()=>visit1Player("Accuse whom?",0,"accuse");
+        case "Herbalist":
+            return ()=>visit1Player("Poison whom?",0,"poison");
         default:
             return null;
 }}
@@ -124,7 +134,7 @@ getInfo=(role)=>{
     switch (role.name) {
         case "Deputy":
             let s=getPlayerByRole('Sheriff');
-            if (s&&s.alive) return null;
+            if (s&&tonight().alive.includes(s)) return null;
         case "Sheriff":
             if (checkedPlayer) return ()=>tellPlayer(`Your target is ${checkedPlayer.role.guilt?'':'not '}guilty.`);
         case "Consigliere":
@@ -141,12 +151,12 @@ getInfo=(role)=>{
                     let s1=checkedPlayer.role.side;
                     let s2=checked2.role.side;
                     return ()=>tellPlayer(`Your targets are ${(s1==s2&&['Mafia','Town'].includes(s1))||allied3rd.some(t=>t.includes(checkedPlayer.role.name)&&t.includes(checked2.role.name))?'':'not '}on the same side.`)};
-            } finally {return roleblockMessage}
+            } catch {return roleblockMessage}
         case "Waterboarder":
             try {
                 checkedPlayer=tonight().visits.find(v=>v.from.role.name=='Waterboarder'&&v.act=='waterboard').to;
                 return ()=>tellPlayer(`The player you roleblocked is the ${checkedPlayer.role.name}.`);
-            } finally {return roleblockMessage}
+            } catch {return roleblockMessage}
         case "Tree-Hat":
             if (role.bulletproof<1) return null;
             return checkedPlayer?()=>tellPlayer(`Your target ${tonight().visitsFrom(checkedPlayer)||checkedPlayer.role.action1||getSkill(checkedPlayer.role)||getInfo(checkedPlayer.role)?'woke':'did not wake'} up.`):roleblockMessage;
@@ -170,6 +180,10 @@ getInfo=(role)=>{
             return ()=>tellPlayer(`The Mafia target was${tonight().visits[0].from.role.side=="Mafia"&&checkedPlayer&&tonight().visits[0].to==checkedPlayer?'':' not'} changed.`);
         case "Miner":
             return ()=>tellPlayer(role.bulletproof?tonight().wasRoleRoleblocked('Miner')?"You were roleblocked. No info.":`You were visited by:<br>${tonight().visitsTo(getPlayerByRole('Miner')).map(v=>v.from.name).sort().join(', ')||'No one'}`:"You lost your bulletproof. No info.");
+        case "Psychic":
+            return ()=>tellPlayer(tonight().wasRoleRoleblocked('Psychic')?"You were roleblocked. No info.":'Guilty players: '+tonight().alive.filter(p=>p.role.guilt).length);
+        case "Seer":
+            return nightNum()>1&&nights[nightNum()-2].block?()=>tellPlayer((nights[nightNum()-2].block.some(p=>p.role.guilt)?'Not e':'E')+'veryone on the block yesterday was innocent.'):null;
         default:
             return null;
 }}

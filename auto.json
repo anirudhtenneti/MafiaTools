@@ -33,7 +33,10 @@
         "Night Crawler",
         "Miner",
         "Tinker",
-        "Shrink"
+        "Shrink",
+        "General",
+        "Psychic",
+        "Seer"
     ],
     "mafia": [
         "Mafia",
@@ -59,7 +62,10 @@
         "Escape Artist",
         "King",
         "Tactician",
-        "Traitor+"
+        "Traitor+",
+        "Framer",
+        "Accuser",
+        "Hangman"
     ],
     "third": [
         "Serial Killer",
@@ -68,7 +74,10 @@
         "Waterboarder",
         "Agoraphobe",
         "Arsonist",
+        "Douser",
         "Amnesiac",
-        "Jester"
+        "Jester",
+        "Zombie",
+        "Herbalist"
     ]
 }

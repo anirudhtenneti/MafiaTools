@@ -11,7 +11,6 @@ Array.prototype.getRandom=function(pop) {
 /*Call f with probability p*/
 chance=(p,f)=>Math.random()<p&&f();
 players=[];
-skipCount=0;
 /*This means duplicate names are not OK*/
 getPlayerByName=n=>players.find(x=>x.name==n);
 getPlayerByRole=r=>players.find(x=>x.role.name==r);
@@ -74,11 +73,12 @@ showInfo=text=>{
     Id('misc').show();
 }
 hideInfo=()=>Id('misc').close();
+sideClass=role=>(role.side||role.team).split(' ')[0].toLowerCase();
 showRole=player=>{
     Id('who').innerText=player.name+', come get your role!';
     Id('role').innerText=player.role.name;
     Id('desc').innerText=player.role.desc;
-    Id('desc').className=(Id('role').className=player.role.side.split(' ')[0].toLowerCase());
+    Id('desc').className=(Id('role').className=sideClass(player.role));
     Id('num').innerText=player.num;
     Id('roleHider').show();
     Id('yourRole').show();
@@ -91,7 +91,7 @@ wake=(player,then)=>{
     Id('wake').onclick=()=>{Id('actionHider').close();then()};
     Id('actionHider').show();
 }
-mafiaKill=()=>action("Everyone awake with you right now is Mafia. If only you are awake, you are the only Mafia. The Mafia collectively decide who performs the kill (left) and who dies (right). When done, gesture to all other Mafia to sleep, and pass the device on."+(getPlayerByRole('Traitor')||getPlayerByRole('Traitor+')?'<br>A Traitor is in the game.':''),0,livePlayers().filter(x=>x.role.side=="Mafia"&&!nonWakingMafia.includes(x.role.name)||x.role.name=="Backstabber").map(x=>x.name),liveNames(),()=>{tonight().visits.push(new Visit(getPlayerByName(Id('action2choices').value),getPlayerByName(Id('action2choices2').value),"kill"))});
+mafiaKill=()=>action("Everyone awake with you right now is Mafia. If only you are awake, you are the only Mafia. The Mafia collectively decide who performs the kill (left) and who dies (right). When done, gesture to all other Mafia to sleep, and pass the device on."+(nightNum()==1&&getPlayerByRole('Traitor')||getPlayerByRole('Traitor+')?'<br>A Traitor is in the game.':''),0,livePlayers().filter(x=>x.role.side=="Mafia"&&!nonWakingMafia.includes(x.role.name)||x.role.name=="Backstabber").map(x=>x.name),liveNames(),()=>{tonight().visits.push(new Visit(getPlayerByName(Id('action2choices').value),getPlayerByName(Id('action2choices2').value),"kill"))});
 tellPlayer=(text,canPass,choice1,choice2)=>action(text,canPass,choice1,choice2);
 visit1Player=(text,canPass,what,extraChoices,then,noSelf)=>action(text,canPass,liveNames().filter(n=>!noSelf||n!=currentPlayer.name),extraChoices,()=>{push1Visit(what);then&&then()});
 visit2Players=(text,canPass,what,then,noSelf)=>action(text,canPass,liveNames().filter(n=>!noSelf||n!=currentPlayer.name),liveNames().filter(n=>!noSelf||n!=currentPlayer.name),()=>{push1Visit(what);pushVisit2(what);then&&then()});
@@ -133,40 +133,133 @@ action=(text,canPass,choices,choices2,handler)=>{
         d.style.visibility="hidden";
     }
 }
-startDay=()=>{
+clearNomination=p=>{
+    p.nominations=0;
+    let v=p.voteBox;
+    v.nominateBtn.disabled=!(v.secondBtn.disabled=(v.clearBtn.disabled=1));
+}
+nominate=p=>{
+    p.nominations=1;
+    let v=p.voteBox;
+    v.nominateBtn.disabled=!(v.secondBtn.disabled=(v.clearBtn.disabled=0));
+}
+second=p=>{
+    p.nominations=2;
+    let v=p.voteBox;
+    v.nominateBtn.disabled=(v.secondBtn.disabled=(v.clearBtn.disabled=1));
+    let n=tonight().block.push(p);
+    if (n==blockSize) {
+        Id('endBlock').disabled=livePlayers().forEach(p=>{
+            p.voteBox.clearBtn.disabled=p.voteBox.nominateBtn.disabled=p.voteBox.secondBtn.disabled=1;
+        });
+    } else if (n==blockSize-1) {
+        let a=tonight().accused;
+        a&&(tonight().block.includes(a)||second(alert(a.name+' was added to the block!')||a));
+    }
+    Id('blocklist').innerText=tonight().block.map(p=>p.name).join(', ');
+}
+startNominations=()=>{
+    let live=livePlayers().length;
+    blockSize=live<8?2:3;
+    try {getPlayerByRole('Hangman').alive&&blockSize++}catch{}
+    Id('block').show();
+    Id('votes').innerHTML='';
+    tonight().block=[];
+    Id('blocklist').innerText='No one';
+    if (live>3) {
+        Id('endBlock').disabled=Id('blockSize').innerText=`Proceed to defenses when ${blockSize} people are on the block.`;
+        for (let p of livePlayers()) {
+            p.nominations=0;
+            let v=document.createElement('div');
+            v.style.display='inline-block';
+            v.style.border='1px white solid';
+            v.style.width='46%';
+            let n=document.createElement('label');
+            n.style.margin=((p.voteBox=v).style.margin='2px');
+            n.innerText=(v.player=p).name;
+            v.appendChild(n);
+            n=document.createElement('button');
+            n.innerText='Clear nomination';
+            n.disabled=1;
+            n.style.background='#8f8';
+            n.addEventListener('click',()=>{clearNomination(v.player)});
+            v.appendChild(v.clearBtn=n);
+            n=document.createElement('button');
+            n.innerText='Nominate';
+            n.style.background='#ff8';
+            n.addEventListener('click',()=>{nominate(v.player)});
+            v.appendChild(v.nominateBtn=n);
+            n=document.createElement('button');
+            n.innerText='Second';
+            n.disabled=2;
+            n.style.background='#f88';
+            n.addEventListener('click',()=>{second(v.player)});
+            v.appendChild(v.secondBtn=n);
+            Id('votes').appendChild(v)
+        }
+    } else {
+        Id('blockSize').innerText='Too few players to make a block. Voting is done by mob rule.';
+        Id('endBlock').disabled=tonight().block=null;
+    }
+}
+startVotes=info=>{
     Id('day').show();
+    info?(Id('voteInfo').innerHTML=info,Id('voteInfo').style.display=''):Id('voteInfo').style.display='none';
     let v=Id('vote');
-    v.innerHTML='<optgroup label="No-vote"><option>No one</option></optgroup>';
-    for (let c of liveNames()) {
+    v.innerHTML='<optgroup label="No execution"><option value="">No-vote motion passed</option><option>3 consecutive ties</option></optgroup>';
+    for (let c of (tonight().block&&tonight().block.filter(p=>p.alive)||livePlayers()).map(p=>p.name)) {
         v.innerHTML+=`<option>${c}</option>`;
     }
-    Id('vote').disabled=(Id('confirm').disabled=!(Id('night').disabled=true));
+    Id('reblock').disabled=(Id('vote').disabled=(Id('confirm').disabled=!(Id('night').disabled=1)));
 }
 vote=()=>{
+    // let voted=(tonight().voted=tonight().block.includes(tonight().framed)?tonight().framed:getPlayerByName(Id('vote').value));
     let voted=getPlayerByName(Id('vote').value);
-    voted&&((voted.role.name=="Escape Artist"&&livePlayers().filter(p=>p.role.side=='Mafia').length>1&&(nightNum()<2||(voted.role.wasVoted=1)))||(voted.alive=0));
-    showInfo((voted?voted.alive?`${voted.name} survived being voted out!`:`${voted.name} was voted out and turned out to be the ${voted.role.name}!`+(voted.role.name=='Jester'?'<br>The Jester wins!':''):(skipCount++,'Everyone is safe…for now.'))+'<br>'+checkWinner());
+    voted&&tonight().voted.push(voted);
+    tonight().block&&tonight().voted.length&&tonight().block.includes(tonight().framed)&&(tonight().voted.push(voted=tonight().framed));
+    voted&&((voted.role.name=="Escape Artist"&&livePlayers().filter(p=>p.role.side=='Mafia').length>1&&(nightNum()<2||(voted.role.wasVoted=1)))||(voted.dying=!(voted.alive=0)));
+    showInfo((voted?voted.alive?`${voted.name} survived being voted out!`:`${voted.name} was voted out and turned out to be the ${roleSpan(voted)}!`+(voted.role.name=='Jester'?'<br>Jester wins!':''):((Id('vote').value==''&&skipCount++),'The town abstained.'))+'<br>'+tonight().wounds.map(p=>p.name+' died! '+p.name+(p.dying%2?' was the '+roleSpan(p):"'s role was not revealed")+'.').join('<br>')+'<br>'+checkWinner());
     Id('skipCount').innerText=`The town has no-voted ${skipCount} time(s).`;
-    Id('night').disabled=!(Id('vote').disabled=(Id('confirm').disabled=true));
+    let h=getPlayerByRole('Hangman');
+    if (h&&h.alive&&tonight().voted.length==1) {
+        return startVotes('<span class="mafia">The Hangman demands another execution.</span>');
+    }
+    tonight().alive.forEach(p=>{delete p.voteBox});
+    Id('night').disabled=!(Id('reblock').disabled=(Id('vote').disabled=(Id('confirm').disabled=true)));
 }
 endDay=()=>{
     Id('day').close();
     nextNight();
 }
 checkWinner=()=>{
+    gameOver=1;
+    let msg;
     let l=livePlayers();
-    if (l.length<1) return 'Everyone died! Stalemate!';
-    if (l.every(p=>p.role.side=='Town'||lawfulEvil.includes(p.role.name))) return 'Town victory!';
-    if (l.every(p=>p.role.side!='Third Party'||lawfulEvil.includes(p.role.name))) {
+    if (l.length<1) msg='Everyone died! Stalemate!';
+    else if (l.every(p=>p.role.side=='Town'||lawfulEvil.includes(p.role.name))) msg='<span class="town">Town victory!</span>';
+    else if (l.every(p=>p.role.side!='Third Party'||lawfulEvil.includes(p.role.name))) {
         let b=getPlayerByRole('Backstabber')
         if (b) {
             (l.filter(p=>p.role.side=="Mafia").length+1<l.length/2||((b.role=new Role('Serial Killer')).bulletproof=1));
         } else {
-            if (l.filter(p=>p.role.side=="Mafia").length>=l.length/2) return 'Mafia victory!';
+            if (l.filter(p=>p.role.side=="Mafia").length>=l.length/2) msg='<span class="mafia">Mafia victory!</span>';
+        }
+    } else {
+        let winning3rds;
+        if (l.every(p=>p.role.side=='Third Party')) {
+            if (l.length==1) {
+                winning3rds=l.map(p=>p.role.name);
+            } else {
+                let a=allied3rd.find(a=>l.every(p=>a.includes(p.role.name)));
+                a&&(winning3rds=a.filter(w=>players.some(p=>p.role.name==w)));
+            }
+            if (winning3rds) {msg=`<span class="third">${winning3rds.join(', ')} victory!</span>`};
         }
     }
-    let winning3rds=l.every(p=>p.role.side=='Third Party')?l.length==1?l.map(p=>p.role.name):allied3rd.find(a=>l.every(p=>a.includes(p.role.name))).filter(w=>players.some(p=>p.role.name==w)):0;
-    if (winning3rds) return winning3rds.join(', ')+" victory!";
+    if (msg) {
+        return msg+'<br><button onclick="showInfo(gameLog())">Click to see game log</button>';
+    }
+    gameOver=0;
     return 'The game continues…';
 }
 class Player {
@@ -193,17 +286,32 @@ class Role {
 }
 class Night {
     constructor() {
+        this.voted=[];
         this.visits=[];
         this.alive=livePlayers();
         this.actionQueue=[];
         this.announcements=[];
+        this.wounds=[];
+        this.roles=[];
     }
     /*Changes to roles that should occur before waking
     them to avoid arbitrariness from wakeup order*/
     handleRoleChanges() {
         for (let p of this.alive) {
-            p.role.tinkered&&(p.role.uses=getUses(p.role))&&(p.role.bulletproof=getBulletproof(p.role));
-            p.role.shrunk&&p.role.side=='Third Party'&&(p.role=new Role('Townie'))&&this.actionQueue.push({player:p,action:()=>tellPlayer('Your role has changed! See above.')});
+            if (p.role.zombied) {
+                delete p.role.zombied;
+                let o=structuredClone(p.role);
+                (p.role=new Role('Zombie')).bulletproof=0;
+                p.role.zombifiedBy=o.zombifiedBy;
+                delete o.zombifiedBy;
+                p.originalRole=o;
+                this.actionQueue.push({player:p,action:()=>tellPlayer('You were zombified! You win and die with the original Zombie.')})
+            } else if (p.role.shrunk) {
+                p.role.side=='Third Party'&&(p.role=new Role('Townie'))&&this.actionQueue.push({player:p,action:()=>tellPlayer('You became a Townie and now win with the Town.')});
+            } else {
+                p.role.tinkered==nightNum()&&((p.role.uses=getUses(p.role)),(p.role.bulletproof=getBulletproof(p.role)));
+            }
+            this.roles[p.name]=p.role;
         }
     }
     handleReflects() {
@@ -228,12 +336,6 @@ class Night {
     }
     /*Visits that should not be detected*/
     handleInvis() {
-        // let i=this.visitsFromRole('Hitman');
-        // i=i.concat(this.visitsFromRole('Scenic').filter(v=>v.act!='fake'));
-        // let k=getPlayerByRole('Serial Killer');
-        // k&&(k.role.guilt||(i=i.concat(this.visitsFrom(k))));
-        // i=i.concat(this.visitsByType('tactic'));
-        // i.forEach(v=>v.invis=1);
         for (let v of this.visits) {
             (v.from.role.name=='Hitman'||
             (v.from.role.name=='Scenic'&&v.act!='fake')||
@@ -258,7 +360,7 @@ class Night {
         }
         (s=getPlayerByRole('Siren'))&&(
             i=this.visitsFrom(s).filter(v=>v.act=='charm'),
-            i.forEach(c=>this.visitsFrom(c.to).forEach(v=>v.to=s))
+            i.forEach(c=>this.visitsFrom(c.to).forEach(v=>v.to==samplePlayer||(v.to=s)))
         );
         (s=getPlayerByRole('Bodyguard'))&&(
             i=this.visitsFrom(s).filter(v=>v.act=='guard'),
@@ -278,10 +380,13 @@ class Night {
             a.invis=1;
             this.visits.push(a)});
         s=getPlayerByRole('Veteran');
-        s&&this.wasRoleRoleblocked('Veteran')||this.visitsFromRole('Veteran').length&&this.visitsTo(s,1).forEach(v=>{
+        if (s&&this.wasRoleRoleblocked('Veteran')||this.visitsFromRole('Veteran').length) {
+            this.visits=this.visits.filter(v=>v.from.role.name!='Veteran');
+            this.visitsTo(s,1).forEach(v=>{
             let a=new Visit(s,v.from,'kill');
             a.invis=1;
             this.visits.push(a)});
+        };
         s=getPlayerByRole('Electrician');
         s&&s.role.uses&&this.visitsTo(s,1).forEach(v=>{
             if (s.role.uses) {
@@ -294,25 +399,47 @@ class Night {
             let a=new Visit(s,v.from,'save');
             a.invis=1;
             this.visits.push(a)});
-        s=this.visits.find(v=>(v.from.role.name=="King"&&(v.to===null)));
+        s=this.visits.find(v=>(v.from.role.name=="King"&&(v.to==samplePlayer)));
         if (s) {
             this.visits=this.visits.filter(v=>v!=s);
             let q=getPlayerByRole('Queen');
             this.announcements.push(`No one may talk${q&&q.alive?` except ${q.name}`:''}!`)
         };
     }
+    /*Roles affecting others' actions*/
     handleActChanges() {
         //Arms Dealer makes someone kill
         let b=this.visits.find(v=>v.act=='arm');
-        b&&this.visitsFrom(b.to).forEach(v=>v.act='kill');
+        b&&this.visitsFrom(b.to,1).forEach(v=>v.act='kill');
         //If Virgin "visited anyone" aka used ability, delete Virgin's visit and bard everyone
-        // if (this.visitsFromRole('Virgin').length) {(this.visits=this.visits.filter(v=>v.from.role.name!="Virgin")).forEach(k=>killingVisits.includes(k.act)&&!k.strong&&!delayedKills.includes(k.act)&&(k.act=''))}
-        if (this.visitsFromRole('Virgin').length) {this.alive.forEach(p=>{let v=new Visit(null,p,'save');v.strong=(v.invis=1);this.visits.push(v)})}
+        if (this.visitsFromRole('Virgin').length) {this.visits=this.visits.filter(v=>v.from.role.name!="Virgin");this.alive.forEach(p=>{let v=new Visit(samplePlayer,p,'save');v.strong=(v.invis=1);this.visits.push(v)})}
         else {
-            (b=getPlayerByRole('Bard'))&&this.visitsFrom(b).forEach(v=>this.visitsFrom(v.to,1).forEach(k=>killingVisits.includes(k.act)&&!k.strong&&(k.act='')));
+            (b=getPlayerByRole('Bard'))&&this.visitsFrom(b,1).forEach(v=>this.visitsFrom(v.to,1).forEach(k=>killingVisits.includes(k.act)&&!k.strong&&(k.act='')));
         }
-        this.visitsByType('tinker').forEach(v=>v.to.role.tinkered=1);
-        this.visitsByType('shrink').forEach(v=>v.to.role.shrunk=1);
+    }
+    handleMisc() {
+        for (let v of this.visits) {
+            switch (v.act) {
+                case 'tinker':
+                    v.to.role.tinkered=nightNum()+1;break;
+                case 'shrink':
+                    v.to.role.shrunk=1;break;
+                case 'zombify':
+                    let z=v.to.role;
+                    if (z.name!='Zombie'&&!this.visitsTo(v.to,2).some(v=>savingVisits.includes(v.act))) {
+                        z.zombied=1;
+                        z.zombifiedBy=v.from.name;
+                    }
+                    break;
+                case 'frame':
+                    this.actionQueue.push({player:v.to,action:()=>tellPlayer('You are framed! If you are on the block today, you die even if someone else has majority vote.')});
+                case 'accuse':
+                    this[v.act+'d']=v.to;break;
+                case 'poison':
+                    this.actionQueue.push({player:v.to,action:()=>tellPlayer("You are poisoned! You'll die next night if not saved.")});
+                    v.to.poison==nightNum()||(v.to.poison=nightNum()+1);break;
+            }
+        }
     }
     /*Mafia that affect the communal kill*/
     mafiaKillEffects() {
@@ -347,32 +474,38 @@ class Night {
         this.kills=[];
         this.saves=[];
         //Agoraphobe tentative kill
-        this.visitsByType('agora').forEach(v=>this.visitsTo(v.to).length>1&&(v.act=''));
+        this.visitsByType('agora').forEach(v=>v.act=(this.visitsTo(v.to).length>1?'':'kill'));
         this.visits.forEach(v=>killingVisits.includes(v.act)?this.kills.push(v):savingVisits.includes(v.act)?this.saves.push(v.to):v.act=='douse'&&(v.to.doused=1));
         //Arsonist ignition
-        let i=this.visits.find(v=>["Arsonist","Douser"].includes(v.from.role.name)&&v.to===null);
+        let i=this.visits.find(v=>["Arsonist","Douser"].includes(v.from.role.name)&&v.to===samplePlayer);
         i&&(this.visits=this.visits.filter(v=>v!=i),this.alive.forEach(p=>p.doused&&(this.saves.includes(p)||this.burnPlayer(p))));
         //Delayed kills
-        this.alive.forEach(p=>p.doom==nightNum()&&this.kills.push(new Visit(null,p,'kill')));
+        this.alive.forEach(p=>p.poison==nightNum()?this.saves.includes(p)?this.visitsTo(p).find(v=>v.act=='poison')&&(p.poison=nightNum()+1):p.dying=5:p.doom==nightNum()&&this.kills.push(new Visit(samplePlayer,p,'kill')));
         //Normal kills
-        this.kills.forEach(k=>k.to&&(this.saves.includes(k.to)&&!k.strong||(k.act=='burn'?this.burnPlayer(k.to):k.act=='snipe'?k.to.doom=nightNum()+1:this.killPlayer(k))));
-        //Witch fate inversion
-        this.visitsFromRole('Witch').forEach(v=>v.to.dying=v.to.dying?0:1);
+        this.kills.forEach(k=>k.to&&(this.saves.includes(k.to)&&!k.strong||(k.act=='burn'?this.burnPlayer(k.to):k.act=='poison'?1:k.act=='snipe'?k.to.doom=nightNum()+1:this.killPlayer(k))));
+        //Witch fate inversion and zombie cure
+        this.visitsFromRole('Witch').forEach(v=>v.to.role.name=="Zombie"&&v.to.role.originalRole?(v.to.dying=0,v.to.role=v.role.originalRole):v.to.dying=v.to.dying?0:1);
+        //Converted zombies die with the original
+        let originalZombie=players.find(p=>p.role.name=="Zombie"&&!p.role.zombifiedBy);
+        originalZombie&&((!originalZombie.dying&&originalZombie.role.name=="Zombie")||livePlayers().forEach(p=>{
+            let v={to:p,from:samplePlayer,act:'kill',invis:1,strong:2};
+            p.role.name=='Zombie'&&this.killPlayer(v)&&tonight().visits.push(v);
+        }))
         this.alive.forEach(p=>p.dying&&(p.alive=0));
     }
     run() {
         turn=0;
+        this.handleRoleChanges();
         let wakingMafia=this.alive.filter(x=>x.role.action1);
         if (wakingMafia.length) {
             for (let m=0;m<wakingMafia.length-1;m++) {
                 this.actionQueue.push({player:wakingMafia[m],action:()=>{
                     window.currentActionHandler=()=>{};
-                    action('The device will be passed around until all living Mafia are awake. Nothing to do for now. Pass the device on but do not sleep even if the next screen tells you to.'+(getPlayerByRole('Traitor')||getPlayerByRole('Traitor+')?'<br>A Traitor is in the game.':''))
+                    action('The device will be passed around until all living Mafia are awake. Nothing to do for now. Pass the device on but do not sleep even if the next screen tells you to.'+(nightNum()==1&&getPlayerByRole('Traitor')||getPlayerByRole('Traitor+')?'<br>A Traitor is in the game.':''))
                 }});
             }
             this.actionQueue.push({player:wakingMafia[wakingMafia.length-1],action:mafiaKill});
         }
-        this.handleRoleChanges();
         this.actionQueue=this.actionQueue.concat(this.alive.filter(x=>getSkill(x.role)).map(p=>({player:p,action:getSkill(p.role)})));
         this.nextAction();
     }
@@ -382,13 +515,14 @@ class Night {
         else {
             turn--;
             this.action2done=1;
-            {/*TODO: Evaluate the result of all actions performed in cycles 1 and 2, and 'visit changes' and other post-action2 stuff*/
+            {
                 this.handleReflects();
                 this.handleRoleblocks();
                 this.handleInvis();
                 this.handleVisitChanges();
                 this.handleFakeVisits();
                 this.handleActChanges();
+                this.handleMisc();
                 this.mafiaKillEffects();
                 this.handleKills();
             }
@@ -405,15 +539,24 @@ class Night {
         a?wake(a.player,a.action):wake((livePlayers().length?livePlayers():players).getRandom(),()=>{Id('morn').show()});
     }
     whatToAnnounce() {
+        let shouldWound=getPlayerByRole('General');
+        shouldWound=shouldWound&&shouldWound.alive&&!this.wasRoleRoleblocked('General');
         for (let p of this.alive) {
             switch (p.dying) {
                 case 1:
                 case 2:
-                    this.announcements.push(p.name+' died! '+p.name+(p.dying%2?' was the '+p.role.name:"'s role was not revealed")+'.');
+                    if (shouldWound) {
+                        this.announcements.push(p.name+' is mortally wounded and will die after the vote!');
+                        this.wounds.push(p);
+                    }
+                    else this.announcements.push(p.name+' died! '+p.name+(p.dying%2?' was the '+roleSpan(p):"'s role was not revealed")+'.');
                     break;
                 case 3:
                 case 4:
-                    this.announcements.push(p.name+' burned to death! '+p.name+(p.dying%2?' was the '+p.role.name:"'s role was not revealed")+'.');
+                    this.announcements.push(p.name+' burned to death! '+p.name+(p.dying%2?' was the '+roleSpan(p):"'s role was not revealed")+'.');
+                    break;
+                case 5:
+                    this.announcements.push(p.name+' died of poisoning! '+p.name+' was the '+roleSpan(p)+'.');
                     break;
             }
         }
@@ -427,7 +570,6 @@ class Night {
                     break;
             }
         }
-        // this.announcements.push(checkWinner());
     }
     announce() {
         this.whatToAnnounce();
@@ -458,13 +600,18 @@ class Visit {
     }
 }
 giveRoles=(rolesOverride)=>{
+    skipCount=0;
+    reblockCount=0;
     window.autoRoles||getAutoRoles();
+    afterAnnouncements=Id('useBlock').checked?(Id('reblock').style.display='',startNominations):(Id('reblock').style.display='none',startVotes);
     nights=[];
     let names=Id('names').value.split('\n').map(n=>n.trim());
-    if (names.length<2) {return alert('At least 2 players needed')}
+    if (names.length<4) {return alert('At least 4 players needed')}
     for (let i=0;i<names.length;i++) {
         for (let j=0;j<i;j++) {
-            if (names[i]==names[j]) {return alert('No duplicate names')}
+            if (names[I].length<1) return alert('No blank names')
+            if (names[i].length>49) names[i]=names[i].substr(0,50);
+            if (names[i]==names[j]) return alert('No duplicate names')
         }
     }
     let tier=Id('tier').value;
@@ -476,24 +623,26 @@ giveRoles=(rolesOverride)=>{
         let nums=[1];
         for(let i=1;i<players.length;nums.push(i+=1)){}
         nums.sort(()=>Math.random()-0.5).forEach((n,i)=>players[i].num=n);
-        let roles=getFactions(players.length);
+        let pool=getFactions(players.length);
         let tierCopy={town:autoTiers[tier].town.flat(),mafia:autoTiers[tier].mafia.flat(),third:autoTiers[tier].third.flat()};
-        //TODO remove rolesOverride
-        roles=rolesOverride??roles.map((f)=>tierCopy[f].getRandom(true)||tierCopy['town'].getRandom(true)||'Townie').sort(()=>Math.random()-0.5);
-        for (let i=0;i<roles.length;i++) {
-            let s=sidekicks.find(k=>k[1]==roles[i]);
-            s&&(roles.some(q=>q==s[0])||(roles[i]=s[0]));
-        }
-        roles.includes("Spy")&&(spyInfo=tierCopy['town'].getRandom(1));
-        roles=roles.map(r=>new Role(r));
-        if (roles.every(r=>r.side!='Mafia'||nonWakingMafia.includes(r.name))) {
-            for (let i=0;i<roles.length;i++) {
-                let n=roles[i].name;
-                (n=="Backstabber"||nonWakingMafia.includes(n))&&(roles[i]=new Role(tierCopy['mafia'].getRandom(1)));
-                lawfulEvil.includes(n)&&(roles[i]=new Role(tierCopy['third'].getRandom(1)));
+        Id('noBoring').checked&&(tierCopy.town=tierCopy.town.filter(x=>!boring.includes(x)));
+        let br=x=>!blockRoles.includes(x);
+        Id('useBlock').checked||(tierCopy.town=tierCopy.town.filter(br),tierCopy.mafia=tierCopy.mafia.filter(br));
+        pool=rolesOverride??pool.map((f)=>tierCopy[f].getRandom(true)||tierCopy['town'].getRandom(true)||'Townie').sort(()=>Math.random()-0.5);
+        pool.includes("Spy")&&(spyInfo=tierCopy['town'].getRandom(1));
+        pool=pool.map(r=>new Role(r));
+        if (pool.every(r=>r.side!='Mafia'||nonWakingMafia.includes(r.name))) {
+            for (let i=0;i<pool.length;i++) {
+                let n=pool[i].name;
+                (n=="Backstabber"||nonWakingMafia.includes(n))&&(pool[i]=new Role(tierCopy['mafia'].getRandom(1)));
+                lawfulEvil.includes(n)&&(pool[i]=new Role(tierCopy['third'].getRandom(1)));
             }
         }
-        roles.forEach((r,i)=>players[i].role=r);
+        for (let i=0;i<pool.length;i++) {
+            let s=sidekicks.find(k=>k[1]==pool[i].name);
+            s&&(pool.some(q=>q.name==s[0])||(pool[i]=new Role(s[0])));
+        }
+        pool.forEach((r,i)=>players[i].role=r);
         hideInfo();
         turn=0;
         nextRole();
@@ -508,14 +657,19 @@ nextNight=()=>{
 showHelp=()=>{
     Id('help').showModal();
     if (!Id('roleList').innerHTML) {
-        for (let s of ['town','mafia','third']) {
-            for (let r of autoRoles[s].sort()) {
-                Id('roleList').innerHTML+=`<li class="${s}">${r}</li>`;
-            }
+        for (let r of roles) {
+            let s=sideClass(r);
+            autoRoles[s]&&autoRoles[s].includes(r.name)&&(Id('roleList').innerHTML+=`<li class="${s}" title="${r.description}" style="cursor:help;width:fit-content">${r.name}</li>`);
         }
     }
 }
+roleSpan=(player,nightIndex)=>{
+    let role=nightIndex!=undefined?(nights[nightIndex].roles[player.name]||player.role):player.role;
+    return `<span class="${sideClass(role)}">${role.name}</span>`};
+logPlayer=(player,nightIndex)=>player.name+` (${roleSpan(player,nightIndex)})`;
+gameLog=()=>nights.map((n,i)=>`<h3>Night ${i+1}</h3><ul>${n.visits.length?n.visits.map(v=>`<li>${logPlayer(v.from,i)} used ${(v.invis?'INVISIBLE ':'')+(v.strong?'INFALLIBLE ':'')+(v.act||'NOTHING').toUpperCase()} on ${logPlayer(v.to,i)}</li>`).join(''):'No visits.'}</ul><h3>Day ${i+1}</h3><ul>${n.announcements.length?`<li>${n.announcements.join('</li><li>')}</li>`:''}${n.block?'<li>'+n.block.map(q=>logPlayer(q,i)).join(', ')+" were on the block.</li>":''}<li>Executed: ${`${n.voted.length?n.voted.map(q=>logPlayer(q,i)).join(', '):'No one'}.`}</li></ul>`).join('')+`<h4>${checkWinner().split('<br>')[0]}</h4>`;
 init=()=>{
     Id('tier').value='all';
     getAutoRoles();
+    (samplePlayer=new Player('Automod')).role={name:"Mod",side:"Fourth Party"};
 }
