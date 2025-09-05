@@ -10,7 +10,7 @@ init=()=>{
         l.addEventListener('click',(e)=>{read(e.srcElement.nextSibling.files[0])});
         document.getElementsByTagName('header')[0].lastChild.outerHTML='<input type="file"><hr>'
     }
-    (document.getElementById('lsConsent').checked=localStorage.getItem('consent'))&&setColors(localStorage.getItem('background'),localStorage.getItem('color'),localStorage.getItem('bad'),localStorage.getItem('good'),localStorage.getItem('neutral'))||loadGame(localStorage.getItem('0'));
+    (document.getElementById('lsConsent').checked=localStorage.getItem('consent'))?(loadGame(localStorage.getItem('0')),setColors([localStorage.getItem('background'),localStorage.getItem('color'),localStorage.getItem('bad'),localStorage.getItem('good'),localStorage.getItem('neutral')])):addRole();
 };
 setCurr=(c)=>{
     currentRole=c;
@@ -114,14 +114,17 @@ setSideCol=(side,col)=>{
     Array.from(document.styleSheets[0].rules).find(x=>x.selectorText=='.'+side).style.color=col;
     store(side,col);
 }
-setColors=(a,t,b,g,n)=>{
-    a&&setBodyCSS('background',a);
-    t&&setBodyCSS('color',t);
-    b&&setSideCol('bad',b);
-    g&&setSideCol('good',g);
-    n&&setSideCol('neutral',n);
+setColors=a=>{
+    a[0]&&setBodyCSS('background',a[0]);
+    a[1]&&setBodyCSS('color',a[1]);
+    a[2]&&setSideCol('bad',a[2]);
+    a[3]&&setSideCol('good',a[3]);
+    a[4]&&setSideCol('neutral',a[4]);
+    main.childNodes[0].nodeName=="#comment"||main.prepend(new Comment());
+    main.childNodes[0].textContent=a.join('~');
 };
 saveGame=()=>{
+    setColors(getColors());
     let a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([main.innerHTML],{type:"text/csv"}));
     a.download=(main.children[0]?main.children[0].children[0]?main.children[0].children[0].innerText+'_':main.children[0].innerText+'_':'')+'Mafia.txt';
@@ -140,6 +143,7 @@ loadGame=(html)=>{
         }
     }
     setCurr(main.children[0]);
+    main.childNodes[0].nodeName=="#comment"&&setColors(main.childNodes[0].textContent.split('~'));
 }
 read=(file)=>{
     if (file.type.startsWith('text')) {

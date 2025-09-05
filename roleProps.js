@@ -19,6 +19,8 @@ lawfulEvil=["Traitor","Jester","Backstabber","Amnesiac"];
 boring=["Townie","1-Shot Bulletproof Townie","Fireproof Townie","Sleepwalker","Miller","Sage","Shopkeeper"];
 /*Roles working with the block*/
 blockRoles=["Seer","Framer","Accuser","Hangman"];
+/*Mafia that shouldn't be the only one*/
+noSoloMafia=["Escape Artist","Madman"]
 //Abilities other than mafia kill
 getSkill=(role)=>{
     switch (role.name) {
@@ -120,6 +122,12 @@ getSkill=(role)=>{
             return ()=>visit1Player("Accuse whom?",0,"accuse");
         case "Herbalist":
             return ()=>visit1Player("Poison whom?",0,"poison");
+        case "Extortionist":
+            return role.uses&&nightNum()>2?()=>visit1Player("Will you make someone a Traitor? The conversion fails if they're evil.",1,"extort",null,()=>Id('action2skip').checked||role.uses--):null;
+        case "Glass Cannon":
+            return ()=>visit1Player("Will you kill? The kill fails if you're visited.",1,"glass");
+        case "Lobbyist":
+            return ()=>visit1Player("Will you nominate someone?",1,'nominate')
         default:
             return null;
 }}
@@ -237,6 +245,7 @@ getUses=(role)=>{
         case "Trapper":
         case "Veteran":
         case "Virgin":
+        case "Extortionist":
             return 1;
         case "Igniter":
         case "2-Shot Vigilante":

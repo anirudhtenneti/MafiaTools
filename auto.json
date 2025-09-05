@@ -36,7 +36,9 @@
         "Shrink",
         "General",
         "Psychic",
-        "Seer"
+        "Seer",
+        "Glass Cannon",
+        "Lobbyist"
     ],
     "mafia": [
         "Mafia",
@@ -65,7 +67,8 @@
         "Traitor+",
         "Framer",
         "Accuser",
-        "Hangman"
+        "Hangman",
+        "Extortionist"
     ],
     "third": [
         "Serial Killer",
